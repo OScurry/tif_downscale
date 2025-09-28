@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
 """
+Created on Mon Sep 29 01:07:45 2025
+
+@author: JUSCH3
+"""
+
+# -*- coding: utf-8 -*-
+"""
 Created on Mon Sep 29 00:46:02 2025
 
 @author: JUSCH3
@@ -12,8 +19,16 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 
-MAX_SIZE_MB = 50
+MAX_SIZE_MB = 45
 MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
+JPEG_QUALITY = 85  # Adjust for more compression (1-100)
+
+def compress_image(image, quality=JPEG_QUALITY):
+    """Compress a PIL image using JPEG in-memory."""
+    buffer = BytesIO()
+    image.save(buffer, format="JPEG", quality=quality)
+    buffer.seek(0)
+    return Image.open(buffer)
 
 def create_pdf(frame, output_path):
     """Helper to save a PIL image to a single-page PDF."""
@@ -25,7 +40,11 @@ def create_pdf(frame, output_path):
     nw, nh = iw * factor, ih * factor
     x = (pw - nw) / 2
     y = (ph - nh) / 2
-    img_reader = ImageReader(frame)
+
+    # Compress image before embedding
+    compressed_frame = compress_image(frame)
+
+    img_reader = ImageReader(compressed_frame)
     c.drawImage(img_reader, x, y, nw, nh)
     c.showPage()
     c.save()
@@ -35,7 +54,7 @@ def create_pdf(frame, output_path):
     return len(pdf_data)
 
 def tif_to_pdf(input_path, output_path, min_scale=0.1):
-    """Convert a single TIFF to PDF with automatic scaling to fit ≤50 MB."""
+    """Convert a single TIFF to PDF with automatic scaling and compression to fit ≤50 MB."""
     tif_size = os.path.getsize(input_path)
     initial_scale = min(1.0, max(min_scale, (MAX_SIZE_BYTES / tif_size) ** 0.5))
 
@@ -71,6 +90,6 @@ def batch_convert(input_folder, output_folder, min_scale=0.1):
             tif_to_pdf(in_path, out_path, min_scale)
 
 if __name__ == "__main__":
-    input_dir = "input_tifs"
-    output_dir = "output_pdfs"
+    input_dir = r"F:\raikka\raikka3"
+    output_dir = r"F:\raikka\raikka3\o"
     batch_convert(input_dir, output_dir, min_scale=0.1)
