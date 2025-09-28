@@ -1,0 +1,76 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Sep 29 00:46:02 2025
+
+@author: JUSCH3
+"""
+
+import os
+from io import BytesIO
+from PIL import Image
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+
+MAX_SIZE_MB = 50
+MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
+
+def create_pdf(frame, output_path):
+    """Helper to save a PIL image to a single-page PDF."""
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    iw, ih = frame.size
+    pw, ph = A4
+    factor = min(pw / iw, ph / ih)
+    nw, nh = iw * factor, ih * factor
+    x = (pw - nw) / 2
+    y = (ph - nh) / 2
+    img_reader = ImageReader(frame)
+    c.drawImage(img_reader, x, y, nw, nh)
+    c.showPage()
+    c.save()
+    pdf_data = buffer.getvalue()
+    with open(output_path, "wb") as f:
+        f.write(pdf_data)
+    return len(pdf_data)
+
+def tif_to_pdf(input_path, output_path, min_scale=0.1):
+    """Convert a single TIFF to PDF with automatic scaling to fit ≤50 MB."""
+    tif_size = os.path.getsize(input_path)
+    initial_scale = min(1.0, max(min_scale, (MAX_SIZE_BYTES / tif_size) ** 0.5))
+
+    frame = Image.open(input_path).convert("RGB")
+
+    # Apply initial scale
+    if initial_scale < 1.0:
+        w, h = frame.size
+        new_size = (int(w * initial_scale), int(h * initial_scale))
+        frame = frame.resize(new_size, Image.LANCZOS)
+
+    # Save PDF first time
+    pdf_size = create_pdf(frame, output_path)
+
+    # If still too big, do one final scale-down
+    if pdf_size > MAX_SIZE_BYTES:
+        print(f"⚠️ {output_path} too large ({pdf_size/1024/1024:.2f} MB), adjusting scale...")
+        adjustment_scale = (MAX_SIZE_BYTES / pdf_size) ** 0.5
+        w, h = frame.size
+        new_size = (max(1, int(w * adjustment_scale)), max(1, int(h * adjustment_scale)))
+        frame_rescaled = frame.resize(new_size, Image.LANCZOS)
+        pdf_size = create_pdf(frame_rescaled, output_path)
+
+    print(f"✅ Saved {output_path} | final size={pdf_size/1024/1024:.2f} MB")
+
+def batch_convert(input_folder, output_folder, min_scale=0.1):
+    os.makedirs(output_folder, exist_ok=True)
+    for file in os.listdir(input_folder):
+        if file.lower().endswith((".tif", ".tiff")):
+            in_path = os.path.join(input_folder, file)
+            base_name = os.path.splitext(file)[0]
+            out_path = os.path.join(output_folder, base_name + ".pdf")
+            tif_to_pdf(in_path, out_path, min_scale)
+
+if __name__ == "__main__":
+    input_dir = "input_tifs"
+    output_dir = "output_pdfs"
+    batch_convert(input_dir, output_dir, min_scale=0.1)
